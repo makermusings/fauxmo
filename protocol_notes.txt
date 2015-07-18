@@ -1,0 +1,99 @@
+This is the sequence of network traffic that takes place when the Amazon Echo
+discovers Belkin WeMo devices and then is asked to turn on one of the
+devices.
+
+For a more complete explanation of how this works, see 
+http://www.makermusings.com/2015/07/13/amazon-echo-and-home-automation/
+
+
+### This is what the Amazon Echo sends to discover WeMo devices
+M-SEARCH * HTTP/1.1
+HOST: 239.255.255.250:1900
+MAN: "ssdp:discover"
+MX: 15
+ST: urn:Belkin:device:**
+
+
+### This is the reply the Amazon Echo asks for
+HTTP/1.1 200 OK  ## copy
+CACHE-CONTROL: max-age=86400
+DATE: Mon, 22 Jun 2015 17:24:01 GMT
+EXT: 
+LOCATION: http://192.168.5.190:49153/setup.xml
+OPT: "http://schemas.upnp.org/upnp/1/0/"; ns=01
+01-NLS: 905bfa3c-1dd2-11b2-8928-fd8aebaf491c
+SERVER: Unspecified, UPnP/1.0, Unspecified
+X-User-Agent: redsonic
+ST: urn:Belkin:device:**
+USN: uuid:Socket-1_0-221517K0101769::urn:Belkin:device:**
+
+
+### Then this is what the Amazon Echo sends to get the Wemo device info
+GET /setup.xml HTTP/1.1
+Host: 192.168.5.189:49153
+Accept: */*
+
+
+### This is the reply to the request for setup.xml
+### Most of the XML has not been reproduced here and turns
+### out not to be needed to interface with the Amazon Echo
+HTTP/1.1 200 OK
+CONTENT-LENGTH: 5436
+CONTENT-TYPE: text/xml
+DATE: Mon, 22 Jun 2015 22:34:59 GMT
+LAST-MODIFIED: Sat, 01 Jan 2000 00:01:15 GMT
+SERVER: Unspecified, UPnP/1.0, Unspecified
+X-User-Agent: redsonic
+CONNECTION: close
+
+<?xml version="1.0"?>
+<root xmlns="urn:Belkin:device-1-0">
+.
+.
+.
+  <device>
+<deviceType>urn:Belkin:device:controllee:1</deviceType>
+<friendlyName>kitchen lights</friendlyName>
+    <manufacturer>Belkin International Inc.</manufacturer>
+.
+.
+.
+    <modelName>Socket</modelName>
+    <modelNumber>1.0</modelNumber>
+.
+.
+.
+<UDN>uuid:Socket-1_0-221517K0101769</UDN>
+.
+. ### and lots of other stuff that is not reproduced here
+.
+</device>
+</root>
+
+
+### Turn on request:
+POST /upnp/control/basicevent1 HTTP/1.1
+Host: 192.168.5.189:49153
+Accept: */*
+Content-type: text/xml; charset="utf-8"
+SOAPACTION: "urn:Belkin:service:basicevent:1#SetBinaryState"
+Content-Length: 299
+
+<?xml version="1.0" encoding="utf-8"?><s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/" s:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/"><s:Body><u:SetBinaryState xmlns:u="urn:Belkin:service:basicevent:1"><BinaryState>1</BinaryState></u:SetBinaryState></s:Body></s:Envelope>
+
+
+### Turn on response:
+HTTP/1.1 200 OK
+CONTENT-LENGTH: 295
+CONTENT-TYPE: text/xml; charset="utf-8"
+DATE: Mon, 22 Jun 2015 22:45:57 GMT
+EXT:
+SERVER: Unspecified, UPnP/1.0, Unspecified
+X-User-Agent: redsonic
+
+<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/" s:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/"><s:Body>
+<u:SetBinaryStateResponse xmlns:u="urn:Belkin:service:basicevent:1">
+<CountdownEndTime>0</CountdownEndTime>
+</u:SetBinaryStateResponse>
+</s:Body> </s:Envelope>
+

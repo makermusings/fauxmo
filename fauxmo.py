@@ -324,7 +324,7 @@ class upnp_broadcast_responder(object):
         if data:
             if data.find('M-SEARCH') == 0 and data.find('urn:Belkin:device:**') != -1:
                 for device in self.devices:
-                    time.sleep(0.5)
+                    time.sleep(0.1)
                     device.respond_to_search(sender, 'urn:Belkin:device:**')
             else:
                 pass
@@ -373,6 +373,16 @@ class rest_api_handler(object):
         return r.status_code == 200
 
 
+# Each entry is a list with the following elements:
+#
+# name of the virtual switch
+# object with 'on' and 'off' methods
+# port # (optional; may be omitted)
+
+# NOTE: As of 2015-08-17, the Echo appears to have a hard-coded limit of
+# 16 switches it can control. Only the first 16 elements of the FAUXMOS
+# list will be used.
+
 FAUXMOS = [
     ['office lights', rest_api_handler('http://192.168.5.4/ha-api?cmd=on&a=office', 'http://192.168.5.4/ha-api?cmd=off&a=office')],
     ['kitchen lights', rest_api_handler('http://192.168.5.4/ha-api?cmd=on&a=kitchen', 'http://192.168.5.4/ha-api?cmd=off&a=kitchen')],
@@ -395,7 +405,10 @@ p.add(u)
 
 # Create our FauxMo virtual switch devices
 for one_faux in FAUXMOS:
-    switch = fauxmo(one_faux[0], u, p, None, 0, action_handler = one_faux[1])
+    if len(one_faux) == 2:
+        # a fixed port wasn't specified, use a dynamic one
+        one_faux.append(0)
+    switch = fauxmo(one_faux[0], u, p, None, one_faux[2], action_handler = one_faux[1])
 
 dbg("Entering main loop\n")
 

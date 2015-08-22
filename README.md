@@ -35,3 +35,11 @@ running for long periods or choose fixed port numbers.
 Once fauxmo.py is running, simply tell your Echo to "Find connected devices". You can
 also do this from the Echo App web page.
 
+### Related
+
+- http://www.makermusings.com/2015/07/13/amazon-echo-and-home-automation/
+- http://www.makermusings.com/2015/07/18/virtual-wemo-code-for-amazon-echo/
+- http://hackaday.com/2015/07/16/how-to-make-amazon-echo-control-fake-wemo-devices/
+- https://developer.amazon.com/appsandservices/solutions/alexa/alexa-skills-kit
+- https://en.wikipedia.org/wiki/Universal_Plug_and_Play
+- http://www.makermusings.com/2015/07/19/home-automation-with-amazon-echo-apps-part-1/

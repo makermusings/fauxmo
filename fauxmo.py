@@ -458,7 +458,8 @@ if __name__ == "__main__":
     # list will be used.
 
     FAUXMOS = [
-        # Kitchen Cook Scene
+        ['office lights', rest_api_handler('http://192.168.5.4/ha-api?cmd=on&a=office', 'http://192.168.5.4/ha-api?cmd=off&a=office')],
+        ['kitchen lights', rest_api_handler('http://192.168.5.4/ha-api?cmd=on&a=kitchen', 'http://192.168.5.4/ha-api?cmd=off&a=kitchen')],
         ['kitchen lights', isy_rest_handler('scene_number')],
         ['kitchen cans', isy_rest_handler('device_id')],
         ['tv',maker_rest_handler('some_ifttt_action_on','some_ifttt_action_off')]

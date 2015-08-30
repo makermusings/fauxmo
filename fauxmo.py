@@ -27,6 +27,7 @@ THE SOFTWARE.
 # For a complete discussion, see http://www.makermusings.com
 
 import email.utils
+from requests.auth import HTTPDigestAuth,HTTPBasicAuth
 import requests
 import select
 import socket
@@ -372,52 +373,100 @@ class rest_api_handler(object):
         r = requests.get(self.off_cmd)
         return r.status_code == 200
 
+class isy_rest_handler(object):
+    def __init__(self, address):
+        self.address = address
+        self.on_cmd  = 'http://' + ISY_IP + '/rest/nodes/%s/cmd/DON' % self.address;
+        self.off_cmd = 'http://' + ISY_IP + '/rest/nodes/%s/cmd/DOF' % self.address;
+        self.auth    = HTTPBasicAuth(ISY_USERNAME, ISY_PASSWORD);
+        
+    def on(self):
+        dbg('Get: ' + self.on_cmd);
+        r = requests.get(self.on_cmd, auth=self.auth)
+        return r.status_code == 200
+ 
+    def off(self):
+        dbg('Get: ' + self.off_cmd);
+        r = requests.get(self.off_cmd, auth=self.auth)
+        return r.status_code == 200
 
-# Each entry is a list with the following elements:
-#
-# name of the virtual switch
-# object with 'on' and 'off' methods
-# port # (optional; may be omitted)
+class maker_rest_handler(object):
+    def __init__(self, on_do, off_do):
+        self.on_cmd  = 'https://maker.ifttt.com:443/trigger/' + on_do  + '/with/key/' + MAKER_KEY
+        self.off_cmd = 'https://maker.ifttt.com:443/trigger/' + off_do + '/with/key/' + MAKER_KEY
+ 
+    def on(self):
+        dbg('Post: ' + self.on_cmd);
+        r = requests.post(self.on_cmd)
+        return r.status_code == 200
 
-# NOTE: As of 2015-08-17, the Echo appears to have a hard-coded limit of
-# 16 switches it can control. Only the first 16 elements of the FAUXMOS
-# list will be used.
+    def off(self):
+        dbg('Post: ' + self.off_cmd);
+        r = requests.post(self.off_cmd)
+        return r.status_code == 200
 
-FAUXMOS = [
-    ['office lights', rest_api_handler('http://192.168.5.4/ha-api?cmd=on&a=office', 'http://192.168.5.4/ha-api?cmd=off&a=office')],
-    ['kitchen lights', rest_api_handler('http://192.168.5.4/ha-api?cmd=on&a=kitchen', 'http://192.168.5.4/ha-api?cmd=off&a=kitchen')],
-]
+def run(debug,fauxmos):
+    global DEBUG
+    DEBUG = debug
+    
+    # Set up our singleton for polling the sockets for data ready
+    p = poller()
 
+    # Set up our singleton listener for UPnP broadcasts
+    u = upnp_broadcast_responder()
+    u.init_socket()
 
-if len(sys.argv) > 1 and sys.argv[1] == '-d':
-    DEBUG = True
+    # Add the UPnP broadcast listener to the poller so we can respond
+    # when a broadcast is received.
+    p.add(u)
 
-# Set up our singleton for polling the sockets for data ready
-p = poller()
+    # Create our FauxMo virtual switch devices
+    for one_faux in fauxmos:
+        if len(one_faux) == 2:
+            # a fixed port wasn't specified, use a dynamic one
+            one_faux.append(0)
+            switch = fauxmo(one_faux[0], u, p, None, one_faux[2], action_handler = one_faux[1])
 
-# Set up our singleton listener for UPnP broadcasts
-u = upnp_broadcast_responder()
-u.init_socket()
+    dbg("Entering main loop\n")
 
-# Add the UPnP broadcast listener to the poller so we can respond
-# when a broadcast is received.
-p.add(u)
+    while True:
+        try:
+            # Allow time for a ctrl-c to stop the process
+            p.poll(100)
+            time.sleep(0.1)
+        except Exception, e:
+            dbg(e)
+            break
 
-# Create our FauxMo virtual switch devices
-for one_faux in FAUXMOS:
-    if len(one_faux) == 2:
-        # a fixed port wasn't specified, use a dynamic one
-        one_faux.append(0)
-    switch = fauxmo(one_faux[0], u, p, None, one_faux[2], action_handler = one_faux[1])
+if __name__ == "__main__":
 
-dbg("Entering main loop\n")
+    # If using the ISY calls, set your info here:
+    ISY_IP       = 'your_isy_ip'
+    ISY_USERNAME = 'your_isy_user'
+    ISY_PASSWORD = 'your_isy_pasword'
+    # If using IFTT Maker, set your key here.
+    MAKER_KEY = 'your_ifttt_key'
 
-while True:
-    try:
-        # Allow time for a ctrl-c to stop the process
-        p.poll(100)
-        time.sleep(0.1)
-    except Exception, e:
-        dbg(e)
-        break
+    # Each entry is a list with the following elements:
+    #
+    # name of the virtual switch
+    # object with 'on' and 'off' methods
+    # port # (optional; may be omitted)
+    
+    # NOTE: As of 2015-08-17, the Echo appears to have a hard-coded limit of
+    # 16 switches it can control. Only the first 16 elements of the FAUXMOS
+    # list will be used.
+
+    FAUXMOS = [
+        # Kitchen Cook Scene
+        ['kitchen lights', isy_rest_handler('scene_number')],
+        ['kitchen cans', isy_rest_handler('device_id')],
+        ['tv',maker_rest_handler('some_ifttt_action_on','some_ifttt_action_off')]
+    ]
+
+    debug = False
+    if len(sys.argv) > 1 and sys.argv[1] == '-d':
+        debug = True
+
+    run(debug,FAUXMOS);
 

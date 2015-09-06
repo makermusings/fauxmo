@@ -57,13 +57,17 @@ SETUP_XML = """<?xml version="1.0"?>
 
 
 DEBUG = False
+LOGGER = False
 
 def dbg(msg):
     global DEBUG
+    global LOGGER
     if DEBUG:
-        print msg
-        sys.stdout.flush()
-
+        if LOGGER is False:
+            print msg
+            sys.stdout.flush()
+        else:
+            LOGGER.debug(':fauxmo: ' + str(msg))
 
 # A simple utility class to wait for incoming data to be
 # ready on a socket.
@@ -195,16 +199,21 @@ class upnp_device(object):
  
 
 # This subclass does the bulk of the work to mimic a WeMo switch on the network.
+DEVICE_NUMBER = 0
 
 class fauxmo(upnp_device):
+    
     @staticmethod
     def make_uuid(name):
         return ''.join(["%x" % sum([ord(c) for c in name])] + ["%x" % ord(c) for c in "%sfauxmo!" % name])[:14]
 
     def __init__(self, name, listener, poller, ip_address, port, action_handler = None):
+        global DEVICE_NUMBER
+        DEVICE_NUMBER += 1
         self.serial = self.make_uuid(name)
         self.name = name
         self.ip_address = ip_address
+        self.num = DEVICE_NUMBER
         persistent_uuid = "Socket-1_0-" + self.serial
         other_headers = ['X-User-Agent: redsonic']
         upnp_device.__init__(self, listener, poller, port, "http://%(ip_address)s:%(port)s/setup.xml", "Unspecified, UPnP/1.0, Unspecified", persistent_uuid, other_headers=other_headers, ip_address=ip_address)
@@ -212,7 +221,7 @@ class fauxmo(upnp_device):
             self.action_handler = action_handler
         else:
             self.action_handler = self
-        dbg("FauxMo device '%s' ready on %s:%s" % (self.name, self.ip_address, self.port))
+        dbg("FauxMo device %3d '%s' '%s' ready on %s:%s" % (self.num, self.serial, self.name, self.ip_address, self.port))
 
     def get_name(self):
         return self.name
@@ -283,7 +292,7 @@ class fauxmo(upnp_device):
 
 class upnp_broadcast_responder(object):
     TIMEOUT = 0
-
+    
     def __init__(self):
         self.devices = []
 
@@ -308,14 +317,14 @@ class upnp_broadcast_responder(object):
             try:
                 self.ssock.setsockopt(socket.IPPROTO_IP,socket.IP_ADD_MEMBERSHIP,self.mreq)
             except Exception, e:
-                dbg('WARNING: Failed to join multicast group:',e)
+                dbg('WARNING: Failed to join multicast group:' + str(e))
                 ok = False
 
         except Exception, e:
-            dbg("Failed to initialize UPnP sockets:",e)
+            dbg("Failed to initialize UPnP sockets:" + str(e))
             return False
         if ok:
-            dbg("Listening for UPnP broadcasts")
+            dbg("Listening for UPnP broadcasts on " + self.ip + ":" + str(self.port))
 
     def fileno(self):
         return self.ssock.fileno()
@@ -405,10 +414,12 @@ class maker_rest_handler(object):
         r = requests.post(self.off_cmd)
         return r.status_code == 200
 
-def run(debug,fauxmos):
+def run(debug,fauxmos, logger=False):
     global DEBUG
+    global LOGGER
     DEBUG = debug
-    
+    LOGGER = logger
+
     # Set up our singleton for polling the sockets for data ready
     p = poller()
 
@@ -443,9 +454,9 @@ if __name__ == "__main__":
     # If using the ISY calls, set your info here:
     ISY_IP       = 'your_isy_ip'
     ISY_USERNAME = 'your_isy_user'
-    ISY_PASSWORD = 'your_isy_pasword'
+    ISY_PASSWORD = 'your_isy_password'
     # If using IFTT Maker, set your key here.
-    MAKER_KEY = 'your_ifttt_key'
+    MAKER_KEY = 'your_maker_key'
 
     # Each entry is a list with the following elements:
     #
@@ -458,11 +469,11 @@ if __name__ == "__main__":
     # list will be used.
 
     FAUXMOS = [
-        ['office lights', rest_api_handler('http://192.168.5.4/ha-api?cmd=on&a=office', 'http://192.168.5.4/ha-api?cmd=off&a=office')],
-        ['kitchen lights', rest_api_handler('http://192.168.5.4/ha-api?cmd=on&a=kitchen', 'http://192.168.5.4/ha-api?cmd=off&a=kitchen')],
-        ['kitchen lights', isy_rest_handler('scene_number')],
-        ['kitchen cans', isy_rest_handler('device_id')],
-        ['tv',maker_rest_handler('some_ifttt_action_on','some_ifttt_action_off')]
+        # Kitchen Cook Scene
+        ['kitchen lights', isy_rest_handler('61729')],
+        ['kitchen cans', isy_rest_handler('33 48 4D 1')],
+        ['downstairs', isy_rest_handler('64650')],
+        ['tv',maker_rest_handler('family_room_watch_tv','family_room_av_off')]
     ]
 
     debug = False

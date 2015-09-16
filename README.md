@@ -9,9 +9,9 @@ the Amazon Echo with your own home automation.
 The Amazon Echo will allow you to control a limited number of home automation devices 
 by voice. If you want to control device types that it doesn't know about, or perform 
 more sophisticated actions, the Echo doesn't provide any native options. This code
-emulates the Belkin WeMo devices in software, allowing you to have it appear that
-any number of them are on your network and to link their on and off actions to
-any code you want.
+emulates the Belkin WeMo and Philips Hue devices in software, allowing you to have it
+appear that any number of them are on your network and to link their on and off actions
+to any code you want.
 
 ### Instructions
 
@@ -19,13 +19,15 @@ All of the code to make it work is contained in the single file, `fauxmo.py`. It
 requires Python 2.7 and standard libraries. The example handler class that
 reacts to on and off commands uses the [python-requests](http://docs.python-requests.org/en/latest/)
 library, but could be replaced with code that does the same thing in many
-different ways.
+different ways. The example handler for Philips Hue devices communicates with Lifx
+bulbs via the [Lazylights v2.0 API](https://github.com/mpapi/lazylights/tree/2.0)
 
 Copy the fauxmo.py file to your server and edit the FAUXMOS list for the device names
-you want and the URLs to invoke for on and off commands for each one. You can execute it
-simply as `./fauxmo.py`. If you want debug output, execute `./fauxmo.py -d`. If you
-want it to run for an extended period, you could do something like `nohup ./fauxmo.py &`
-or take extra steps to make it run at startup, etc.
+you want and the URLs to invoke for on and off commands for each one. To work with Lifx
+devices, remove the existing entries from FAUXMOS and allow Lazylights to discover bulbs.
+You can execute it simply as `./fauxmo.py`. If you want debug output, execute
+`./fauxmo.py -d`. If you want it to run for an extended period, you could do something like
+`nohup ./fauxmo.py &` or take extra steps to make it run at startup, etc.
 
 **Note:** unless you specify port numbers in the creation of your fauxmo objetcs, your
 virtual switch devices will use a different port every time you run fauxmo.py, which will

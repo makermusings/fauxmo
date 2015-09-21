@@ -27,6 +27,8 @@ THE SOFTWARE.
 # For a complete discussion, see http://www.makermusings.com
 
 import email.utils
+import json
+import lazylights
 import requests
 import select
 import socket
@@ -54,6 +56,36 @@ SETUP_XML = """<?xml version="1.0"?>
 </root>
 """
 
+HUE_SETUP_XML = """<?xml version="1.0" encoding="UTF-8" ?>
+<root xmlns="urn:schemas-upnp-org:device-1-0">
+	<specVersion>
+		<major>1</major>
+		<minor>0</minor>
+	</specVersion>
+	<URLBase>%(host)%(port)/</URLBase>
+	<device>
+		<deviceType>urn:schemas-upnp-org:device:Basic:1</deviceType>
+		<friendlyName>Philips hue (##URLBASE##)</friendlyName>
+		<manufacturer>Royal Philips Electronics</manufacturer>
+		<manufacturerURL>http://www.philips.com</manufacturerURL>
+		<modelDescription>Philips hue Personal Wireless Lighting</modelDescription>
+		<modelName>Philips hue bridge 2012</modelName>
+		<modelNumber>929000226503</modelNumber>
+		<modelURL>http://www.meethue.com</modelURL>
+		<serialNumber>0017880ae670</serialNumber>
+		<UDN>uuid:2f402f80-da50-11e1-9b23-0017880ae670</UDN>
+		<serviceList>
+			<service>
+				<serviceType>(null)</serviceType>
+				<serviceId>(null)</serviceId>
+				<controlURL>(null)</controlURL>
+				<eventSubURL>(null)</eventSubURL>
+				<SCPDURL>(null)</SCPDURL>
+			</service>
+		</serviceList>
+		<presentationURL>index.html</presentationURL>
+	</device>
+</root>"""
 
 DEBUG = False
 
@@ -125,13 +157,14 @@ class upnp_device(object):
         return upnp_device.this_host_ip
         
 
-    def __init__(self, listener, poller, port, root_url, server_version, persistent_uuid, other_headers = None, ip_address = None):
+    def __init__(self, listener, poller, port, root_url, server_version, persistent_uuid, protocol, other_headers = None, ip_address = None):
         self.listener = listener
         self.poller = poller
         self.port = port
         self.root_url = root_url
         self.server_version = server_version
         self.persistent_uuid = persistent_uuid
+        self.protocol = protocol
         self.uuid = uuid.uuid4()
         self.other_headers = other_headers
 
@@ -171,6 +204,9 @@ class upnp_device(object):
     def get_name(self):
         return "unknown"
         
+    def get_protocol(self):
+        return self.protocol
+
     def respond_to_search(self, destination, search_target):
         dbg("Responding to search for %s" % self.get_name())
         date_str = email.utils.formatdate(timeval=None, localtime=False, usegmt=True)
@@ -191,7 +227,128 @@ class upnp_device(object):
         message += "\r\n"
         temp_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         temp_socket.sendto(message, destination)
- 
+
+
+# This subclass implements Philips Hue compatibility
+
+class fauxhue(upnp_device):
+    @staticmethod
+    def make_uuid(name):
+        return ''.join(["%x" % sum([ord(c) for c in name])] + ["%x" % ord(c) for c in "%sfauxhue!" % name])[:14]
+
+    def __init__(self, name, listener, poller, ip_address, port, action_handler = None):
+        self.lights = {}
+        self.privates = {}
+        self.ip_address = ip_address
+        self.serial = self.make_uuid(name)
+        self.name = name
+        persistent_uuid = "Socket-1_0-" + self.serial
+        other_headers = ['X-User-Agent: redsonic']
+        upnp_device.__init__(self, listener, poller, port, "http://%(ip_address)s:%(port)s/description.xml", "Unspecified, UPnP/1.0, Unspecified", persistent_uuid, "hue", other_headers=other_headers, ip_address=ip_address)
+        if action_handler:
+            self.action_handler = action_handler
+        else:
+            self.action_handler = self
+        dbg("FauxHue device '%s' ready on %s:%s" % (self.name, self.ip_address, self.port))
+
+    def add_bulb (self, name, state=False, brightness=0, private=None):
+        light = {
+            "state": {
+		"on": state,
+		"bri": brightness,
+		"hue": 0,
+		"sat": 0,
+		"xy": [0.0000, 0.0000],
+		"ct": 0,
+		"alert": "none",
+		"effect": "none",
+		"colormode": "hs",
+		"reachable": True
+	    },
+	    "type": "Extended color light",
+	    "name": name,
+	    "modelid": "LCT001",
+	    "swversion": "65003148",
+	    "pointsymbol": {
+		"1": "none",
+		"2": "none",
+		"3": "none",
+		"4": "none",
+		"5": "none",
+		"6": "none",
+		"7": "none",
+                "8": "none"
+	    }
+        }
+        lightnum = len(self.lights) + 1
+        self.lights[str(lightnum)] = light
+        self.privates[str(lightnum)] = private
+
+    def get_name(self):
+        return self.name
+
+    def send(self, socket, data):
+        date_str = email.utils.formatdate(timeval=None, localtime=False, usegmt=True)
+        message = ("HTTP/1.1 200 OK\r\n"
+                   "CONTENT-LENGTH: %d\r\n"
+                   "CONTENT-TYPE: text/xml\r\n"
+                   "DATE: %s\r\n"
+                   "LAST-MODIFIED: Sat, 01 Jan 2000 00:01:15 GMT\r\n"
+                   "SERVER: Unspecified, UPnP/1.0, Unspecified\r\n"
+                   "X-User-Agent: redsonic\r\n"
+                   "CONNECTION: close\r\n"
+                   "\r\n"
+                   "%s" % (len(data), date_str, data))
+        dbg(message)
+        socket.send(message)
+
+    def handle_request(self, data, sender, socket):
+        tokens = data.split()
+        if len(tokens) < 3 or tokens[2] != 'HTTP/1.1':
+            dbg("Unknown request %s\n" % data)
+            return
+        requestdata = tokens[1].split('/')
+        if tokens[0] == 'GET':
+            if requestdata[1] == 'description.xml':
+                dbg("Responding to description.xml for %s" % self.name)
+                xml = HUE_SETUP_XML % {'host' : self.ip_address, 'port' : self.port}
+                self.send(socket, xml)
+            elif len(requestdata) == 4 and requestdata[3] == 'lights':
+                data = json.dumps(self.lights)
+                self.send(socket, data)
+            elif len(requestdata) >= 5 and requestdata[3] == 'lights':
+                data = json.dumps(self.lights[requestdata[4]])
+                self.send(socket, data)
+        elif tokens[0] == 'PUT':
+            if len(requestdata) >= 5 and requestdata[3] == 'lights':
+                light = requestdata[4]
+                submission = data.split('\n')[6]
+                command = json.loads(submission)
+                responses = []
+                for setting in command.keys():
+                    value = command[setting]
+                    private = self.privates[light]
+                    self.lights[light]['state'][setting] = value
+                    dbg ("Set %s to %s\n" % (setting, value))
+                    if setting == "on":
+                        if value == True:
+                            self.action_handler.on(private)
+                        elif value == False:
+                            self.action_handler.off(private)
+                    elif setting == "bri":
+                        self.action_handler.dim(private, value)
+                    apistring = "/lights/%s/state/%s" % (light, setting)
+                    responses.append({"success":{apistring : command[setting]}})
+                self.send(socket, json.dumps(responses))
+        else:
+            dbg("Unknown request: %s" % data)
+
+    def on(self):
+        return False
+
+    def off(self):
+        return True
+
 
 # This subclass does the bulk of the work to mimic a WeMo switch on the network.
 
@@ -206,7 +363,7 @@ class fauxmo(upnp_device):
         self.ip_address = ip_address
         persistent_uuid = "Socket-1_0-" + self.serial
         other_headers = ['X-User-Agent: redsonic']
-        upnp_device.__init__(self, listener, poller, port, "http://%(ip_address)s:%(port)s/setup.xml", "Unspecified, UPnP/1.0, Unspecified", persistent_uuid, other_headers=other_headers, ip_address=ip_address)
+        upnp_device.__init__(self, listener, poller, port, "http://%(ip_address)s:%(port)s/setup.xml", "Unspecified, UPnP/1.0, Unspecified", persistent_uuid, "wemo", other_headers=other_headers, ip_address=ip_address)
         if action_handler:
             self.action_handler = action_handler
         else:
@@ -264,10 +421,10 @@ class fauxmo(upnp_device):
         else:
             dbg(data)
 
-    def on(self):
+    def on(self, private):
         return False
 
-    def off(self):
+    def off(self, private):
         return True
 
 
@@ -324,8 +481,14 @@ class upnp_broadcast_responder(object):
         if data:
             if data.find('M-SEARCH') == 0 and data.find('urn:Belkin:device:**') != -1:
                 for device in self.devices:
-                    time.sleep(0.1)
-                    device.respond_to_search(sender, 'urn:Belkin:device:**')
+                    if device.get_protocol() == "wemo":
+                        time.sleep(0.1)
+                        device.respond_to_search(sender, 'urn:Belkin:device:**')
+            elif data.find('M-SEARCH') == 0 and data.find('urn:schemas-upnp-org:device:basic:1') != -1:
+                for device in self.devices:
+                    if device.get_protocol() == "hue":
+                        time.sleep(0.1)
+                        device.respond_to_search(sender, 'urn:schemas-upnp-org:device:basic:1')
             else:
                 pass
 
@@ -373,6 +536,24 @@ class rest_api_handler(object):
         return r.status_code == 200
 
 
+# Lifx handler for the Philips Hue compatibility. The fauxhue class expects
+# handlers to be instances of objects that have on(), off() and dim()
+# methods that return True on success and False otherwise.
+
+class lifx_api_handler(object):
+    def on(self, bulb):
+        lazylights.set_power([bulb.bulb], True)
+        return True
+
+    def off(self, bulb):
+        lazylights.set_power([bulb.bulb], False)
+        return True
+
+    def dim(self, bulb, value):
+        lazylights.set_state([bulb.bulb], bulb.hue, bulb.saturation, value * 65535 / 255, bulb.kelvin, 1000, raw=True)
+        return True
+
+
 # Each entry is a list with the following elements:
 #
 # name of the virtual switch
@@ -409,6 +590,15 @@ for one_faux in FAUXMOS:
         # a fixed port wasn't specified, use a dynamic one
         one_faux.append(0)
     switch = fauxmo(one_faux[0], u, p, None, one_faux[2], action_handler = one_faux[1])
+
+bulbs = lazylights.find_bulbs(timeout=10)
+if len(bulbs) > 0:
+    lifx = fauxhue("LIFX", u, p, None, 0, action_handler = lifx_api_handler())
+    bulbstate = lazylights.get_state(bulbs)
+    for bulb in bulbstate:
+        name = str(bulb.label)
+        name = name.rstrip('\x00')
+        lifx.add_bulb(name, state=bool(bulb.power), brightness=(255 * bulb.brightness / 255), private=bulb)
 
 dbg("Entering main loop\n")
 

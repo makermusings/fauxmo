@@ -236,41 +236,12 @@ class fauxhue(upnp_device):
     def make_uuid(name):
         return ''.join(["%x" % sum([ord(c) for c in name])] + ["%x" % ord(c) for c in "%sfauxhue!" % name])[:14]
 
-    def __init__(self, name, listener, poller, ip_address, port, action_handler = None, state=False, brightness=0, private=None):
+    def __init__(self, name, listener, poller, ip_address, port, action_handler = None):
         self.lights = {}
-        light = {
-	            "state": {
-		            "on": state,
-		            "bri": brightness,
-		            "hue": 0,
-		            "sat": 0,
-		            "xy": [0.0000, 0.0000],
-		            "ct": 0,
-		            "alert": "none",
-		            "effect": "none",
-		            "colormode": "hs",
-		            "reachable": True
-	            },
-	            "type": "Extended color light",
-	            "name": name,
-	            "modelid": "LCT001",
-	            "swversion": "65003148",
-	            "pointsymbol": {
-		            "1": "none",
-		            "2": "none",
-		            "3": "none",
-		            "4": "none",
-		            "5": "none",
-		            "6": "none",
-		            "7": "none",
-                            "8": "none"
-		    }
-        }
-        self.lights[str(len(self.lights)+1)] = light
+        self.privates = {}
+        self.ip_address = ip_address
         self.serial = self.make_uuid(name)
         self.name = name
-        self.ip_address = ip_address
-        self.private = private
         persistent_uuid = "Socket-1_0-" + self.serial
         other_headers = ['X-User-Agent: redsonic']
         upnp_device.__init__(self, listener, poller, port, "http://%(ip_address)s:%(port)s/description.xml", "Unspecified, UPnP/1.0, Unspecified", persistent_uuid, "hue", other_headers=other_headers, ip_address=ip_address)
@@ -279,6 +250,39 @@ class fauxhue(upnp_device):
         else:
             self.action_handler = self
         dbg("FauxHue device '%s' ready on %s:%s" % (self.name, self.ip_address, self.port))
+
+    def add_bulb (self, name, state=False, brightness=0, private=None):
+        light = {
+            "state": {
+		"on": state,
+		"bri": brightness,
+		"hue": 0,
+		"sat": 0,
+		"xy": [0.0000, 0.0000],
+		"ct": 0,
+		"alert": "none",
+		"effect": "none",
+		"colormode": "hs",
+		"reachable": True
+	    },
+	    "type": "Extended color light",
+	    "name": name,
+	    "modelid": "LCT001",
+	    "swversion": "65003148",
+	    "pointsymbol": {
+		"1": "none",
+		"2": "none",
+		"3": "none",
+		"4": "none",
+		"5": "none",
+		"6": "none",
+		"7": "none",
+                "8": "none"
+	    }
+        }
+        lightnum = len(self.lights) + 1
+        self.lights[str(lightnum)] = light
+        self.privates[str(lightnum)] = private
 
     def get_name(self):
         return self.name
@@ -323,15 +327,16 @@ class fauxhue(upnp_device):
                 responses = []
                 for setting in command.keys():
                     value = command[setting]
+                    private = self.privates[light]
                     self.lights[light]['state'][setting] = value
                     dbg ("Set %s to %s\n" % (setting, value))
                     if setting == "on":
                         if value == True:
-                            self.action_handler.on(self.private)
+                            self.action_handler.on(private)
                         elif value == False:
-                            self.action_handler.off(self.private)
+                            self.action_handler.off(private)
                     elif setting == "bri":
-                        self.action_handler.dim(self.private, value)
+                        self.action_handler.dim(private, value)
                     apistring = "/lights/%s/state/%s" % (light, setting)
                     responses.append({"success":{apistring : command[setting]}})
                 self.send(socket, json.dumps(responses))
@@ -587,11 +592,14 @@ for one_faux in FAUXMOS:
     switch = fauxmo(one_faux[0], u, p, None, one_faux[2], action_handler = one_faux[1])
 
 bulbs = lazylights.find_bulbs(timeout=10)
-bulbstate = lazylights.get_state(bulbs)
-for bulb in bulbstate:
-    name = str(bulb.label)
-    name = name.rstrip('\x00')
-    fauxhue(name, u, p, None, 0, state=bool(bulb.power), brightness=(255 * bulb.brightness / 255), action_handler = lifx_api_handler(), private=bulb)
+if len(bulbs) > 0:
+    lifx = fauxhue("LIFX", u, p, None, 0, action_handler = lifx_api_handler())
+    bulbstate = lazylights.get_state(bulbs)
+    for bulb in bulbstate:
+        name = str(bulb.label)
+        name = name.rstrip('\x00')
+        lifx.add_bulb(name, state=bool(bulb.power), brightness=(255 * bulb.brightness / 255), private=bulb)
+
 dbg("Entering main loop\n")
 
 while True:

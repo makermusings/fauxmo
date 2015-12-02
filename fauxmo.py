@@ -102,7 +102,7 @@ class poller:
             target = self.targets.get(one_ready[0], None)
             if target:
                 target.do_read(one_ready[0])
- 
+
 
 # Base class for a generic UPnP device. This is far from complete
 # but it supports either specified or automatic IP address and port
@@ -123,7 +123,7 @@ class upnp_device(object):
             del(temp_socket)
             dbg("got local address of %s" % upnp_device.this_host_ip)
         return upnp_device.this_host_ip
-        
+
 
     def __init__(self, listener, poller, port, root_url, server_version, persistent_uuid, other_headers = None, ip_address = None):
         self.listener = listener
@@ -170,7 +170,7 @@ class upnp_device(object):
 
     def get_name(self):
         return "unknown"
-        
+
     def respond_to_search(self, destination, search_target):
         dbg("Responding to search for %s" % self.get_name())
         date_str = email.utils.formatdate(timeval=None, localtime=False, usegmt=True)
@@ -191,7 +191,7 @@ class upnp_device(object):
         message += "\r\n"
         temp_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         temp_socket.sendto(message, destination)
- 
+
 
 # This subclass does the bulk of the work to mimic a WeMo switch on the network.
 
@@ -379,15 +379,24 @@ class rest_api_handler(object):
 # object with 'on' and 'off' methods
 # port # (optional; may be omitted)
 
+# Exception definitions that are used in the package
+class InvalidPortException(Exception):
+    pass
+
 # NOTE: As of 2015-08-17, the Echo appears to have a hard-coded limit of
-# 16 switches it can control. Only the first 16 elements of the FAUXMOS
+# 16 switches it can control. Only the first 16 elements of the `devices`
 # list will be used.
 
-FAUXMOS = [
-    ['office lights', rest_api_handler('http://192.168.5.4/ha-api?cmd=on&a=office', 'http://192.168.5.4/ha-api?cmd=off&a=office')],
-    ['kitchen lights', rest_api_handler('http://192.168.5.4/ha-api?cmd=on&a=kitchen', 'http://192.168.5.4/ha-api?cmd=off&a=kitchen')],
+devices = [
+    {"description": "office lights",
+     "port": 12345,
+     "handler": rest_api_handler('http://192.168.5.4/ha-api?cmd=on&a=office',
+                                 'http://192.168.5.4/ha-api?cmd=off&a=office')},
+    {"description": "kitchen lights",
+     "port": 54321,
+     "handler": rest_api_handler('http://192.168.5.4/ha-api?cmd=on&a=kitchen',
+                                 'http://192.168.5.4/ha-api?cmd=off&a=kitchen')},
 ]
-
 
 if len(sys.argv) > 1 and sys.argv[1] == '-d':
     DEBUG = True
@@ -403,12 +412,17 @@ u.init_socket()
 # when a broadcast is received.
 p.add(u)
 
-# Create our FauxMo virtual switch devices
-for one_faux in FAUXMOS:
-    if len(one_faux) == 2:
-        # a fixed port wasn't specified, use a dynamic one
-        one_faux.append(0)
-    switch = fauxmo(one_faux[0], u, p, None, one_faux[2], action_handler = one_faux[1])
+
+# Initialize FauxMo devices
+for device in devices:
+    #if `port` doesnt exist, populate it
+    #if it isnt an int, flip out with a descriptive exception
+    if not device.get("port"):
+        device["port"] = 0
+    elif type(device["port"]) is not int:
+        raise InvalidPortException("Invalid port of type: {}, with a value of: {}".format(type(device["port"]), device["port"]))
+
+    fauxmo(device["description"], u, p, None, device["port"], action_handler = device["handler"])
 
 dbg("Entering main loop\n")
 

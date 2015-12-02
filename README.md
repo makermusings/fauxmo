@@ -15,8 +15,7 @@ any code you want.
 
 ### Instructions
 
-All of the code to make it work is contained in the single file, `fauxmo.py`. It
-requires Python 2.7 and standard libraries. The example handler class that
+All of the code to make it work is contained in the single file, `fauxmo.py`, which is python 2, and 3 compatible. The example handler class that
 reacts to on and off commands uses the [python-requests](http://docs.python-requests.org/en/latest/)
 library, but could be replaced with code that does the same thing in many
 different ways.

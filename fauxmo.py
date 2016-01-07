@@ -389,8 +389,7 @@ class mqtt_garage_handler(object):
         pass
 
     def on_publish(self, mqttc, obj, mid):
-        print("mid: " + str(mid) + " " + str(obj))
-        
+        dbg("mid: " + str(mid) + " " + str(obj))
 
     def on(self):
         self.mqttc.publish(self.on_topic, '1')
@@ -414,6 +413,8 @@ class mqtt_garage_handler(object):
 
 FAUXMOS = [
     #['office lights', rest_api_handler('http://192.168.5.4/ha-api?cmd=on&a=office', 'http://192.168.5.4/ha-api?cmd=off&a=office')],
+    # The garage door is a button push, on & off are the same action
+    # XXX does wemo have a 'toggle' concept?
     ['garage door', mqtt_garage_handler(
         "/home/garage/door/control/south/toggle"
         , "/home/garage/door/control/south/toggle"

@@ -35,6 +35,7 @@ import sys
 import time
 import urllib
 import uuid
+import paho.mqtt.client as mqtt
 
 
 
@@ -55,7 +56,7 @@ SETUP_XML = """<?xml version="1.0"?>
 """
 
 
-DEBUG = False
+DEBUG = True
 
 def dbg(msg):
     global DEBUG
@@ -372,6 +373,34 @@ class rest_api_handler(object):
         r = requests.get(self.off_cmd)
         return r.status_code == 200
 
+class mqtt_garage_handler(object):
+    mqttc = None
+    on_topic = None
+    off_topic = None
+    def __init__(self, on_topic, off_topic):
+        self.on_topic = on_topic
+        self.off_topic = off_topic
+        self.mqttc = mqtt.Client()
+        self.mqttc.on_connect = self.on_connect
+        self.mqttc.on_publish = self.on_publish
+        self.mqttc.connect('localhost', 1883, 60);
+
+    def on_connect(self):
+        pass
+
+    def on_publish(self, mqttc, obj, mid):
+        print("mid: " + str(mid) + " " + str(obj))
+        
+
+    def on(self):
+        self.mqttc.publish(self.on_topic, '1')
+        return True
+
+    def off(self):
+        self.mqttc.publish(self.off_topic, '1')
+        return True
+
+
 
 # Each entry is a list with the following elements:
 #
@@ -384,8 +413,12 @@ class rest_api_handler(object):
 # list will be used.
 
 FAUXMOS = [
-    ['office lights', rest_api_handler('http://192.168.5.4/ha-api?cmd=on&a=office', 'http://192.168.5.4/ha-api?cmd=off&a=office')],
-    ['kitchen lights', rest_api_handler('http://192.168.5.4/ha-api?cmd=on&a=kitchen', 'http://192.168.5.4/ha-api?cmd=off&a=kitchen')],
+    #['office lights', rest_api_handler('http://192.168.5.4/ha-api?cmd=on&a=office', 'http://192.168.5.4/ha-api?cmd=off&a=office')],
+    ['garage door', mqtt_garage_handler(
+        "/home/garage/door/control/south/toggle"
+        , "/home/garage/door/control/south/toggle"
+        ), 45186
+    ],
 ]
 
 

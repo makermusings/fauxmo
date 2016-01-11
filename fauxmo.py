@@ -69,6 +69,27 @@ def dbg(msg):
         else:
             LOGGER.debug(':fauxmo: ' + str(msg))
 
+def info_msg(msg):
+    global DEBUG
+    global LOGGER
+    if DEBUG:
+        if LOGGER is False:
+            print msg
+            sys.stdout.flush()
+        else:
+            LOGGER.error(':fauxmo: ' + str(msg))
+
+def error_msg(msg):
+    global DEBUG
+    global LOGGER
+    if DEBUG:
+        if LOGGER is False:
+            print msg
+            sys.stdout.flush()
+        else:
+            LOGGER.error(':fauxmo: ' + str(msg))
+
+
 # A simple utility class to wait for incoming data to be
 # ready on a socket.
 
@@ -420,6 +441,8 @@ def run(debug,fauxmos, logger=False):
     DEBUG = debug
     LOGGER = logger
 
+    dbg("Starting\n")
+    
     # Set up our singleton for polling the sockets for data ready
     p = poller()
 
@@ -436,7 +459,7 @@ def run(debug,fauxmos, logger=False):
         if len(one_faux) == 2:
             # a fixed port wasn't specified, use a dynamic one
             one_faux.append(0)
-            switch = fauxmo(one_faux[0], u, p, None, one_faux[2], action_handler = one_faux[1])
+        switch = fauxmo(one_faux[0], u, p, None, one_faux[2], action_handler = one_faux[1])
 
     dbg("Entering main loop\n")
 

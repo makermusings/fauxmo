@@ -36,6 +36,7 @@ import time
 import urllib
 import uuid
 import paho.mqtt.client as mqtt
+from paho.mqtt.client import MQTT_ERR_NO_CONN
 
 
 
@@ -383,23 +384,27 @@ class mqtt_garage_handler(object):
         self.mqttc = mqtt.Client()
         self.mqttc.on_connect = self.on_connect
         self.mqttc.on_publish = self.on_publish
-        self.mqttc.connect('localhost', 1883, 60);
+        self.mqttc.connect('localhost', 1883, 60)
+        self.mqttc.loop_start()
 
-    def on_connect(self):
-        pass
+    @staticmethod
+    def on_connect(mqttc, obj, flags, rc):
+        dbg("Connected to broker as %s" % mqttc._client_id)
 
-    def on_publish(self, mqttc, obj, mid):
+    @staticmethod
+    def on_publish(mqttc, obj, mid):
         dbg("mid: " + str(mid) + " " + str(obj))
 
     def on(self):
-        self.mqttc.publish(self.on_topic, '1')
+        (result, mid) = self.mqttc.publish(self.on_topic, '1')
+        if MQTT_ERR_NO_CONN == result:
+            self.mqttc.reconnect()
+        (result, mid) = self.mqttc.publish(self.on_topic, '1')
         return True
 
     def off(self):
         self.mqttc.publish(self.off_topic, '1')
         return True
-
-
 
 # Each entry is a list with the following elements:
 #

@@ -77,7 +77,7 @@ def info_msg(msg):
             print msg
             sys.stdout.flush()
         else:
-            LOGGER.error(':fauxmo: ' + str(msg))
+            LOGGER.info(':fauxmo: ' + str(msg))
 
 def error_msg(msg):
     global DEBUG
@@ -173,8 +173,24 @@ class upnp_device(object):
             self.port = self.socket.getsockname()[1]
         self.poller.add(self)
         self.client_sockets = {}
+        # Build our message to make responses faster.
+        location_url = self.root_url % {'ip_address' : self.ip_address, 'port' : self.port}
+        self.message = ("HTTP/1.1 200 OK\r\n"
+                  "CACHE-CONTROL: max-age=86400\r\n"
+                  "DATE: %s\r\n"
+                  "EXT:\r\n"
+                  "LOCATION: %s\r\n"
+                  "OPT: \"http://schemas.upnp.org/upnp/1/0/\"; ns=01\r\n"
+                  "01-NLS: %s\r\n"
+                  "SERVER: %s\r\n"
+                  "ST: %s\r\n"
+                  "USN: uuid:%s::%s\r\n" % ('%s', location_url, self.uuid, self.server_version, '%s', self.persistent_uuid, '%s'))
+        if self.other_headers:
+            for header in self.other_headers:
+                self.message += "%s\r\n" % header
+        self.message += "\r\n"
         self.listener.add_device(self)
-
+        
     def fileno(self):
         return self.socket.fileno()
 
@@ -198,25 +214,13 @@ class upnp_device(object):
         return "unknown"
         
     def respond_to_search(self, destination, search_target):
-        dbg("Responding to search for %s" % self.get_name())
         date_str = email.utils.formatdate(timeval=None, localtime=False, usegmt=True)
-        location_url = self.root_url % {'ip_address' : self.ip_address, 'port' : self.port}
-        message = ("HTTP/1.1 200 OK\r\n"
-                  "CACHE-CONTROL: max-age=86400\r\n"
-                  "DATE: %s\r\n"
-                  "EXT:\r\n"
-                  "LOCATION: %s\r\n"
-                  "OPT: \"http://schemas.upnp.org/upnp/1/0/\"; ns=01\r\n"
-                  "01-NLS: %s\r\n"
-                  "SERVER: %s\r\n"
-                  "ST: %s\r\n"
-                  "USN: uuid:%s::%s\r\n" % (date_str, location_url, self.uuid, self.server_version, search_target, self.persistent_uuid, search_target))
-        if self.other_headers:
-            for header in self.other_headers:
-                message += "%s\r\n" % header
-        message += "\r\n"
         temp_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        temp_socket.sendto(message, destination)
+        temp_socket.sendto(
+            self.message % (date_str, search_target, search_target),
+            destination
+        )
+        info_msg("Responded to search for %s" % self.get_name())
  
 
 # This subclass does the bulk of the work to mimic a WeMo switch on the network.
@@ -234,15 +238,17 @@ class fauxmo(upnp_device):
         self.serial = self.make_uuid(name)
         self.name = name
         self.ip_address = ip_address
+        self.port = port
         self.num = DEVICE_NUMBER
         persistent_uuid = "Socket-1_0-" + self.serial
         other_headers = ['X-User-Agent: redsonic']
+        info_msg("device %3d '%s' '%s' starting on %s:%s" % (self.num, self.serial, self.name, self.ip_address, self.port))
         upnp_device.__init__(self, listener, poller, port, "http://%(ip_address)s:%(port)s/setup.xml", "Unspecified, UPnP/1.0, Unspecified", persistent_uuid, other_headers=other_headers, ip_address=ip_address)
         if action_handler:
             self.action_handler = action_handler
         else:
             self.action_handler = self
-        dbg("FauxMo device %3d '%s' '%s' ready on %s:%s" % (self.num, self.serial, self.name, self.ip_address, self.port))
+        info_msg("device %3d '%s' '%s' ready on %s:%s" % (self.num, self.serial, self.name, self.ip_address, self.port))
 
     def get_name(self):
         return self.name

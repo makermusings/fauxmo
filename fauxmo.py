@@ -37,6 +37,8 @@ import urllib
 import uuid
 import paho.mqtt.client as mqtt
 from paho.mqtt.client import MQTT_ERR_NO_CONN
+from pyicloud import PyiCloudService
+import yaml
 
 
 
@@ -374,6 +376,19 @@ class rest_api_handler(object):
         r = requests.get(self.off_cmd)
         return r.status_code == 200
 
+class icloud_api_handler(object):
+    icloud_device=None
+    def __init__(self, icd):
+        self.icloud_device = icd;
+
+    def on(self):
+        icloud_device.display_message(subject='Find iPhone Alert', message='Hello', sounds=True)
+        return True
+
+    def off(self):
+        icloud_device.lost_device('216-751-4709', text='This device has been deactivated. Please call me.')
+        return True
+
 class mqtt_garage_handler(object):
     mqttc = None
     on_topic = None
@@ -416,17 +431,24 @@ class mqtt_garage_handler(object):
 # 16 switches it can control. Only the first 16 elements of the FAUXMOS
 # list will be used.
 
+yf = file('/etc/fauxmo.yaml', 'r')
+yaml = yaml.load(yf)
+yf.close()
+
+
+acct = y['icloud']['account0']
+icloud_api = PyiCloudService(acct['username'], acct['password'])
+
 FAUXMOS = [
     #['office lights', rest_api_handler('http://192.168.5.4/ha-api?cmd=on&a=office', 'http://192.168.5.4/ha-api?cmd=off&a=office')],
     # The garage door is a button push, on & off are the same action
     # XXX does wemo have a 'toggle' concept?
-    ['garage door', mqtt_garage_handler(
-        "/home/garage/door/control/south/toggle"
-        , "/home/garage/door/control/south/toggle"
-        ), 45186
-    ],
-]
+    ['garage door', mqtt_garage_handler("/home/garage/door/control/south/toggle"
+            , "/home/garage/door/control/south/toggle"), 45186]
 
+    , ["Chad's iPhone", icloud_api_handler(icloud_api.devices[0]), 45187 ]
+    , ["Harris iPod", icloud_api_handler(icloud_api.devices[1]), 45188 ]
+]
 
 if len(sys.argv) > 1 and sys.argv[1] == '-d':
     DEBUG = True

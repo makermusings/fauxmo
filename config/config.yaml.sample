@@ -1,0 +1,9 @@
+icloud:
+    account0:
+        username: steve@apple.com
+        password: yourefired
+
+
+    account1:
+        username: tim@apple.com
+        password: yourehired

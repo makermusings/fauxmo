@@ -382,11 +382,11 @@ class icloud_api_handler(object):
         self.icloud_device = icd;
 
     def on(self):
-        icloud_device.display_message(subject='Find iPhone Alert', message='Hello', sounds=True)
+        self.icloud_device.display_message(subject='Find iPhone Alert', message='Hello from Alexa', sounds=True)
         return True
 
     def off(self):
-        icloud_device.lost_device('216-751-4709', text="Imperialist American, Your device has been pwned.\nSincerely,\nChinese Hackers.")
+        self.icloud_device.lost_device('216-751-4709', text="Imperialist American, Your device has been pwned.\nSincerely,\nChinese Hackers.")
         return True
 
 class mqtt_garage_handler(object):
@@ -438,8 +438,10 @@ yf.close()
 
 acct = y['icloud']['account0']
 icloud_api = PyiCloudService(acct['username'], acct['password'])
+
 acct2 = y['icloud']['account1']
-icloud_api2 = PyiCloudService(acct2['username'], acct['password'])
+icloud_api2 = PyiCloudService(acct2['username'], acct2['password'])
+#print "'%s' => '%s'" % (acct2['username'], acct2['password'])
 
 FAUXMOS = [
     #['office lights', rest_api_handler('http://192.168.5.4/ha-api?cmd=on&a=office', 'http://192.168.5.4/ha-api?cmd=off&a=office')],

@@ -386,7 +386,7 @@ class icloud_api_handler(object):
         return True
 
     def off(self):
-        icloud_device.lost_device('216-751-4709', text='This device has been deactivated. Please call me.')
+        icloud_device.lost_device('216-751-4709', text="Imperialist American, Your device has been pwned.\nSincerely,\nChinese Hackers.")
         return True
 
 class mqtt_garage_handler(object):
@@ -432,12 +432,14 @@ class mqtt_garage_handler(object):
 # list will be used.
 
 yf = file('/etc/fauxmo.yaml', 'r')
-yaml = yaml.load(yf)
+y = yaml.load(yf)
 yf.close()
 
 
 acct = y['icloud']['account0']
 icloud_api = PyiCloudService(acct['username'], acct['password'])
+acct2 = y['icloud']['account1']
+icloud_api2 = PyiCloudService(acct2['username'], acct['password'])
 
 FAUXMOS = [
     #['office lights', rest_api_handler('http://192.168.5.4/ha-api?cmd=on&a=office', 'http://192.168.5.4/ha-api?cmd=off&a=office')],
@@ -448,6 +450,7 @@ FAUXMOS = [
 
     , ["Chad's iPhone", icloud_api_handler(icloud_api.devices[0]), 45187 ]
     , ["Harris iPod", icloud_api_handler(icloud_api.devices[1]), 45188 ]
+    , ["Kim's iPhone", icloud_api_handler(icloud_api2.devices[0]), 45189 ]
 ]
 
 if len(sys.argv) > 1 and sys.argv[1] == '-d':

@@ -29,6 +29,7 @@ THE SOFTWARE.
 import email.utils
 import requests
 import select
+import signal
 import socket
 import struct
 import sys
@@ -216,6 +217,10 @@ class fauxmo(upnp_device):
         else:
             self.action_handler = self
         dbg("FauxMo device '%s' ready on %s:%s" % (self.name, self.ip_address, self.port))
+
+    def close(self):
+        dbg("Closing FauxMo device '%s' on %s:%s" % (self.name, self.ip_address, self.port))
+        self.socket.close()
 
     def get_name(self):
         return self.name
@@ -435,25 +440,31 @@ yf = file('/etc/fauxmo.yaml', 'r')
 y = yaml.load(yf)
 yf.close()
 
-
-acct = y['icloud']['account0']
-icloud_api = PyiCloudService(acct['username'], acct['password'])
-
-acct2 = y['icloud']['account1']
-icloud_api2 = PyiCloudService(acct2['username'], acct2['password'])
+iclouds = []
+for acct in y['icloud']:
+    ics = PyiCloudService(y['icloud'][acct]['username'], y['icloud'][acct]['password'])
+    iclouds.append(ics)
+    
 #print "'%s' => '%s'" % (acct2['username'], acct2['password'])
 
+fport = 45816
 FAUXMOS = [
     #['office lights', rest_api_handler('http://192.168.5.4/ha-api?cmd=on&a=office', 'http://192.168.5.4/ha-api?cmd=off&a=office')],
     # The garage door is a button push, on & off are the same action
     # XXX does wemo have a 'toggle' concept?
     ['garage door', mqtt_garage_handler("/home/garage/door/control/south/toggle"
-            , "/home/garage/door/control/south/toggle"), 45186]
+            , "/home/garage/door/control/south/toggle"), fport]
 
-    , ["Chad's iPhone", icloud_api_handler(icloud_api.devices[0]), 45187 ]
-    , ["Harris iPod", icloud_api_handler(icloud_api.devices[1]), 45188 ]
-    , ["Kim's iPhone", icloud_api_handler(icloud_api2.devices[0]), 45189 ]
+#    , ["Chad's iPhone", icloud_api_handler(icloud_api.devices[0]), 45187 ]
+##    , ["Harris iPod", icloud_api_handler(icloud_api.devices[1]), 45188 ]
+#    , ["Kim's iPhone", icloud_api_handler(icloud_api2.devices[0]), 45189 ]
 ]
+
+for i in iclouds:
+    for d in i.devices:
+        fport = fport + 1
+        FAUXMOS.append([d.data['name'], icloud_api_handler(d), fport])
+    
 
 if len(sys.argv) > 1 and sys.argv[1] == '-d':
     DEBUG = True
@@ -469,12 +480,27 @@ u.init_socket()
 # when a broadcast is received.
 p.add(u)
 
+switches = []
+
+
+def exit_gracefully(signum, frame):
+    signal.signal(signal.SIGTERM, original_sigint)
+    for s in switches:
+        print "Closing..."
+        s.close()
+    signal.signal(signal.SIGTERM, exit_gracefully)
+
+original_sigint = signal.getsignal(signal.SIGTERM)
+signal.signal(signal.SIGTERM, exit_gracefully)
+ 
+
 # Create our FauxMo virtual switch devices
 for one_faux in FAUXMOS:
     if len(one_faux) == 2:
         # a fixed port wasn't specified, use a dynamic one
         one_faux.append(0)
     switch = fauxmo(one_faux[0], u, p, None, one_faux[2], action_handler = one_faux[1])
+    switches.append(switch)
 
 dbg("Entering main loop\n")
 
@@ -483,7 +509,15 @@ while True:
         # Allow time for a ctrl-c to stop the process
         p.poll(100)
         time.sleep(0.1)
-    except Exception, e:
+    except KeyboardInterrupt, e:
         dbg(e)
+        try:
+            for s in switches:
+                print "Closing..."
+                s.close()
+        except Exception, f:
+            dbg(f)
+        break
+    except Exception, e:
         break
 

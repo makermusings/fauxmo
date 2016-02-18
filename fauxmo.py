@@ -42,6 +42,8 @@ from pyicloud import PyiCloudService
 import yaml
 
 
+ICLOUD_REFRESH_SECONDS = 5 * 60
+_icloudRefreshing = False
 
 # This XML is the minimum needed to define one of our virtual switches
 # to the Amazon Echo
@@ -387,10 +389,14 @@ class icloud_api_handler(object):
         self.icloud_device = icd;
 
     def on(self):
+        while(_icloudRefreshing):
+            time.sleep(1);
         self.icloud_device.display_message(subject='Find iPhone Alert', message='Hello from Alexa', sounds=True)
         return True
 
     def off(self):
+        while(_icloudRefreshing):
+            time.sleep(1);
         self.icloud_device.lost_device('216-751-4709', text="Imperialist American, Your device has been pwned.\nSincerely,\nChinese Hackers.")
         return True
 
@@ -461,9 +467,8 @@ FAUXMOS = [
 ]
 
 for i in iclouds:
-    for d in i.devices:
-        fport = fport + 1
-        FAUXMOS.append([d.data['name'], icloud_api_handler(d), fport])
+    fport = fport + 1
+    FAUXMOS.append([d.data['name'], icloud_api_handler(i.iphone), fport])
     
 
 if len(sys.argv) > 1 and sys.argv[1] == '-d':
@@ -483,6 +488,14 @@ p.add(u)
 switches = []
 
 
+def icloud_keepalive(signum, frame):
+    _icloudRefreshing = True
+    for i in iclouds:
+        print 'Refreshing iCloud for %s' % i.iphone.data['name']
+    signal.alarm(ICLOUD_REFRESH_SECONDS)
+    _icloudRefreshing = False
+
+
 def exit_gracefully(signum, frame):
     signal.signal(signal.SIGTERM, original_sigint)
     for s in switches:
@@ -492,6 +505,7 @@ def exit_gracefully(signum, frame):
 
 original_sigint = signal.getsignal(signal.SIGTERM)
 signal.signal(signal.SIGTERM, exit_gracefully)
+signal.signal(signal.SIGALRM, icloud_keepalive)
  
 
 # Create our FauxMo virtual switch devices
@@ -503,6 +517,7 @@ for one_faux in FAUXMOS:
     switches.append(switch)
 
 dbg("Entering main loop\n")
+signal.alarm(ICLOUD_REFRESH_SECONDS)
 
 while True:
     try:

@@ -42,7 +42,7 @@ from pyicloud import PyiCloudService
 import yaml
 
 
-ICLOUD_REFRESH_SECONDS = 5 * 60
+ICLOUD_REFRESH_SECONDS = 30 # 5 * 60
 _icloudRefreshing = False
 
 # This XML is the minimum needed to define one of our virtual switches
@@ -391,12 +391,14 @@ class icloud_api_handler(object):
     def on(self):
         while(_icloudRefreshing):
             time.sleep(1);
+            dbg("Waiting for iCloud to refresh")
         self.icloud_device.display_message(subject='Find iPhone Alert', message='Hello from Alexa', sounds=True)
         return True
 
     def off(self):
         while(_icloudRefreshing):
             time.sleep(1);
+            dbg("Waiting for iCloud to refresh")
         self.icloud_device.lost_device('216-751-4709', text="Imperialist American, Your device has been pwned.\nSincerely,\nChinese Hackers.")
         return True
 
@@ -468,7 +470,7 @@ FAUXMOS = [
 
 for i in iclouds:
     fport = fport + 1
-    FAUXMOS.append([d.data['name'], icloud_api_handler(i.iphone), fport])
+    FAUXMOS.append([i.iphone.data['name'], icloud_api_handler(i.iphone), fport])
     
 
 if len(sys.argv) > 1 and sys.argv[1] == '-d':
@@ -492,8 +494,12 @@ def icloud_keepalive(signum, frame):
     _icloudRefreshing = True
     for i in iclouds:
         print 'Refreshing iCloud for %s' % i.iphone.data['name']
+        i.iphone.manager.refresh_client()
     signal.alarm(ICLOUD_REFRESH_SECONDS)
+    print 'Resetting alarm timeout'
+
     _icloudRefreshing = False
+    print 'All iCloud clients refreshed'
 
 
 def exit_gracefully(signum, frame):

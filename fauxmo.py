@@ -35,6 +35,7 @@ import sys
 import time
 import urllib
 import uuid
+import RPi.GPIO as GPIO
 
 
 
@@ -372,12 +373,26 @@ class rest_api_handler(object):
         r = requests.get(self.off_cmd)
         return r.status_code == 200
 
+class gpio_handler(object):
+    def __init__(self, pin_number):
+        self.pin = pin_number
+        GPIO.setmode(GPIO.BCM)
+        GPIO.setup(self.pin, GPIO.OUT)
 
+    def on(self):
+        GPIO.output(self.pin, 1)
+        return True
+    def off(self):
+        GPIO.output(self.pin, 0)
+        return True
 # Each entry is a list with the following elements:
-#
+# 
 # name of the virtual switch
 # object with 'on' and 'off' methods
 # port # (optional; may be omitted)
+#
+
+
 
 # NOTE: As of 2015-08-17, the Echo appears to have a hard-coded limit of
 # 16 switches it can control. Only the first 16 elements of the FAUXMOS
@@ -386,6 +401,8 @@ class rest_api_handler(object):
 FAUXMOS = [
     ['office lights', rest_api_handler('http://192.168.5.4/ha-api?cmd=on&a=office', 'http://192.168.5.4/ha-api?cmd=off&a=office')],
     ['kitchen lights', rest_api_handler('http://192.168.5.4/ha-api?cmd=on&a=kitchen', 'http://192.168.5.4/ha-api?cmd=off&a=kitchen')],
+    # use GPIO pin 11 to trigger a relay
+	['Bedroom lights', gpio_handler(11),58304],
 ]
 
 
@@ -412,12 +429,15 @@ for one_faux in FAUXMOS:
 
 dbg("Entering main loop\n")
 
-while True:
-    try:
+try:
+    while True:
+        try:
         # Allow time for a ctrl-c to stop the process
-        p.poll(100)
-        time.sleep(0.1)
-    except Exception, e:
-        dbg(e)
-        break
+            p.poll(100)
+            time.sleep(0.1)
+        except Exception, e:
+            dbg(e)
+            break
 
+finally:
+    GPIO.cleanup()

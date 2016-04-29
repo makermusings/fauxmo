@@ -2,7 +2,7 @@
 **Emulated Belkin WeMo devices that work with the Amazon Echo**
 
 Visit [this Maker Musings article](http://www.makermusings.com/2015/07/13/amazon-echo-and-home-automation/) to learn more about using this code to integrate
-the Amazon Echo with your own home automation.
+the Amazon Echo with your own home automation. This is fork of the [makermusings/fauxmo](https://github.com/makermusings/fauxmo) repository. I've added a handler to control gpio pins on the raspbery pi. 
 
 ### Summary
 

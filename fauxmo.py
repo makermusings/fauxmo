@@ -29,14 +29,21 @@ THE SOFTWARE.
 import email.utils
 import requests
 import select
+import signal
 import socket
 import struct
 import sys
 import time
 import urllib
 import uuid
+import paho.mqtt.client as mqtt
+from paho.mqtt.client import MQTT_ERR_NO_CONN
+from pyicloud import PyiCloudService
+import yaml
 
 
+ICLOUD_REFRESH_SECONDS = 30 # 5 * 60
+_icloudRefreshing = False
 
 # This XML is the minimum needed to define one of our virtual switches
 # to the Amazon Echo
@@ -55,7 +62,7 @@ SETUP_XML = """<?xml version="1.0"?>
 """
 
 
-DEBUG = False
+DEBUG = True
 
 def dbg(msg):
     global DEBUG
@@ -212,6 +219,10 @@ class fauxmo(upnp_device):
         else:
             self.action_handler = self
         dbg("FauxMo device '%s' ready on %s:%s" % (self.name, self.ip_address, self.port))
+
+    def close(self):
+        dbg("Closing FauxMo device '%s' on %s:%s" % (self.name, self.ip_address, self.port))
+        self.socket.close()
 
     def get_name(self):
         return self.name
@@ -372,6 +383,56 @@ class rest_api_handler(object):
         r = requests.get(self.off_cmd)
         return r.status_code == 200
 
+class icloud_api_handler(object):
+    icloud_device=None
+    def __init__(self, icd):
+        self.icloud_device = icd;
+
+    def on(self):
+        while(_icloudRefreshing):
+            time.sleep(1);
+            dbg("Waiting for iCloud to refresh")
+        self.icloud_device.display_message(subject='Find iPhone Alert', message='Hello from Alexa', sounds=True)
+        return True
+
+    def off(self):
+        while(_icloudRefreshing):
+            time.sleep(1);
+            dbg("Waiting for iCloud to refresh")
+        self.icloud_device.lost_device('216-555-1212', text="Imperialist American, Your device has been pwned.\nSincerely,\nChinese Hackers.")
+        return True
+
+class mqtt_garage_handler(object):
+    mqttc = None
+    on_topic = None
+    off_topic = None
+    def __init__(self, on_topic, off_topic):
+        self.on_topic = on_topic
+        self.off_topic = off_topic
+        self.mqttc = mqtt.Client()
+        self.mqttc.on_connect = self.on_connect
+        self.mqttc.on_publish = self.on_publish
+        self.mqttc.connect('localhost', 1883, 60)
+        self.mqttc.loop_start()
+
+    @staticmethod
+    def on_connect(mqttc, obj, flags, rc):
+        dbg("Connected to broker as %s" % mqttc._client_id)
+
+    @staticmethod
+    def on_publish(mqttc, obj, mid):
+        dbg("mid: " + str(mid) + " " + str(obj))
+
+    def on(self):
+        (result, mid) = self.mqttc.publish(self.on_topic, '1')
+        if MQTT_ERR_NO_CONN == result:
+            self.mqttc.reconnect()
+        (result, mid) = self.mqttc.publish(self.on_topic, '1')
+        return True
+
+    def off(self):
+        self.mqttc.publish(self.off_topic, '1')
+        return True
 
 # Each entry is a list with the following elements:
 #
@@ -383,11 +444,31 @@ class rest_api_handler(object):
 # 16 switches it can control. Only the first 16 elements of the FAUXMOS
 # list will be used.
 
+yf = file('/etc/fauxmo.yaml', 'r')
+y = yaml.load(yf)
+yf.close()
+
+iclouds = []
+for acct in y['icloud']:
+    ics = PyiCloudService(y['icloud'][acct]['username'], y['icloud'][acct]['password'])
+    iclouds.append(ics)
+    
+#print "'%s' => '%s'" % (acct2['username'], acct2['password'])
+
+fport = 45816
 FAUXMOS = [
-    ['office lights', rest_api_handler('http://192.168.5.4/ha-api?cmd=on&a=office', 'http://192.168.5.4/ha-api?cmd=off&a=office')],
-    ['kitchen lights', rest_api_handler('http://192.168.5.4/ha-api?cmd=on&a=kitchen', 'http://192.168.5.4/ha-api?cmd=off&a=kitchen')],
+    #['office lights', rest_api_handler('http://192.168.5.4/ha-api?cmd=on&a=office', 'http://192.168.5.4/ha-api?cmd=off&a=office')],
+    # The garage door is a button push, on & off are the same action
+    # XXX does wemo have a 'toggle' concept?
+    ['garage door', mqtt_garage_handler("/home/garage/door/control/south/toggle"
+            , "/home/garage/door/control/south/toggle"), fport]
+
 ]
 
+for i in iclouds:
+    fport = fport + 1
+    FAUXMOS.append([i.iphone.data['name'], icloud_api_handler(i.iphone), fport])
+    
 
 if len(sys.argv) > 1 and sys.argv[1] == '-d':
     DEBUG = True
@@ -403,21 +484,58 @@ u.init_socket()
 # when a broadcast is received.
 p.add(u)
 
+switches = []
+
+
+def icloud_keepalive(signum, frame):
+    _icloudRefreshing = True
+    for i in iclouds:
+        print 'Refreshing iCloud for %s' % i.iphone.data['name']
+        i.iphone.manager.refresh_client()
+    signal.alarm(ICLOUD_REFRESH_SECONDS)
+    print 'Resetting alarm timeout'
+
+    _icloudRefreshing = False
+    print 'All iCloud clients refreshed'
+
+
+def exit_gracefully(signum, frame):
+    signal.signal(signal.SIGTERM, original_sigint)
+    for s in switches:
+        print "Closing..."
+        s.close()
+    signal.signal(signal.SIGTERM, exit_gracefully)
+
+original_sigint = signal.getsignal(signal.SIGTERM)
+signal.signal(signal.SIGTERM, exit_gracefully)
+signal.signal(signal.SIGALRM, icloud_keepalive)
+ 
+
 # Create our FauxMo virtual switch devices
 for one_faux in FAUXMOS:
     if len(one_faux) == 2:
         # a fixed port wasn't specified, use a dynamic one
         one_faux.append(0)
     switch = fauxmo(one_faux[0], u, p, None, one_faux[2], action_handler = one_faux[1])
+    switches.append(switch)
 
 dbg("Entering main loop\n")
+signal.alarm(ICLOUD_REFRESH_SECONDS)
 
 while True:
     try:
         # Allow time for a ctrl-c to stop the process
         p.poll(100)
         time.sleep(0.1)
-    except Exception, e:
+    except KeyboardInterrupt, e:
         dbg(e)
+        try:
+            for s in switches:
+                print "Closing..."
+                s.close()
+        except Exception, f:
+            dbg(f)
+        break
+    except Exception, e:
         break
 

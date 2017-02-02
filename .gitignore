@@ -1,0 +1,10 @@
+*.yaml
+.*.swp
+.*.swo
+core
+*.log
+*.out
+*delme*
+delme*
+*Delme*
+

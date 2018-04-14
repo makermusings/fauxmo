@@ -35,7 +35,8 @@ import sys
 import time
 import urllib
 import uuid
-
+import subprocess
+import os
 
 
 # This XML is the minimum needed to define one of our virtual switches
@@ -54,6 +55,8 @@ SETUP_XML = """<?xml version="1.0"?>
 </root>
 """
 
+# ADRSIR command path
+IR_PATH = "~/I2C0x52-IR"
 
 DEBUG = False
 
@@ -102,7 +105,7 @@ class poller:
             target = self.targets.get(one_ready[0], None)
             if target:
                 target.do_read(one_ready[0])
- 
+
 
 # Base class for a generic UPnP device. This is far from complete
 # but it supports either specified or automatic IP address and port
@@ -123,7 +126,7 @@ class upnp_device(object):
             del(temp_socket)
             dbg("got local address of %s" % upnp_device.this_host_ip)
         return upnp_device.this_host_ip
-        
+
 
     def __init__(self, listener, poller, port, root_url, server_version, persistent_uuid, other_headers = None, ip_address = None):
         self.listener = listener
@@ -170,7 +173,7 @@ class upnp_device(object):
 
     def get_name(self):
         return "unknown"
-        
+
     def respond_to_search(self, destination, search_target):
         dbg("Responding to search for %s" % self.get_name())
         date_str = email.utils.formatdate(timeval=None, localtime=False, usegmt=True)
@@ -191,7 +194,7 @@ class upnp_device(object):
         message += "\r\n"
         temp_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         temp_socket.sendto(message, destination)
- 
+
 
 # This subclass does the bulk of the work to mimic a WeMo switch on the network.
 
@@ -372,6 +375,21 @@ class rest_api_handler(object):
         r = requests.get(self.off_cmd)
         return r.status_code == 200
 
+class exec_handler(object):
+    def __init__(self, on_cmd, off_cmd):
+        self.on_cmd = on_cmd
+        self.off_cmd = off_cmd
+
+    def on(self):
+        dbg("cmd: python %s/r02.py t %s" % (IR_PATH ,self.on_cmd))
+        r = subprocess.call(["python", os.path.expanduser("%s/r02.py" % IR_PATH), "t", os.path.expanduser("%s/%s" % (IR_PATH,self.on_cmd))])
+        return r
+
+    def off(self):
+        dbg("cmd: python %s/r02.py t %s"  %  (IR_PATH, self.off_cmd))
+        r = subprocess.call(["python", os.path.expanduser("%s/r02.py" % IR_PATH ), "t", os.path.expanduser("%s/%s" % (IR_PATH,self.off_cmd))])
+        return r
+
 
 # Each entry is a list with the following elements:
 #
@@ -384,8 +402,20 @@ class rest_api_handler(object):
 # list will be used.
 
 FAUXMOS = [
-    ['office lights', rest_api_handler('http://192.168.5.4/ha-api?cmd=on&a=office', 'http://192.168.5.4/ha-api?cmd=off&a=office')],
-    ['kitchen lights', rest_api_handler('http://192.168.5.4/ha-api?cmd=on&a=kitchen', 'http://192.168.5.4/ha-api?cmd=off&a=kitchen')],
+    ['TV_ONOFF', exec_handler('tv/ch7.data', 'tv/ch8.data'),42200],
+    ['TV_SILENT', exec_handler('tv/ch9.data', 'tv/ch8.data'),42201],
+    ['TV_VOL', exec_handler('tv2/ch0.data', 'tv2/ch1.data'),42202],
+    ['TV_ECOSRC', exec_handler('tv2/ch2.data', 'tv/ch0.data'),42203],
+    ['AMP_ONOFF', exec_handler('amp/ch0.data', 'amp/ch1.data'),42210],
+    ['AMP_VOL', exec_handler('amp/ch2.data', 'amp/ch3.data'),42211],
+    ['AMP_SRC_CDTUNER', exec_handler('amp/ch4.data', 'amp/ch5.data'),42212],
+    ['AMP_SRC_RECOPT', exec_handler('amp/ch6.data', 'amp/ch7.data'),42213],
+    ['LIVINGLIGHT_ONOFF', exec_handler('living/ch0.data', 'living/ch1.data'),42220],
+    ['LIVINGLIGHT_MODE1', exec_handler('living/ch2.data', 'living/ch3.data'),42221],
+    ['LIVINGLIGHT_MODE2', exec_handler('living/ch4.data', 'living/ch5.data'),42222],
+    ['LIVINGLIGHT_MODE3', exec_handler('living/ch6.data', 'living/ch7.data'),42223],
+    ['RECORDER_ONOFF', exec_handler('recorder/ch0.data', 'recorder/ch1.data'),42230],
+    ['RECORDER_PAUSE', exec_handler('recorder/ch6.data', 'recorder/ch4.data'),42231],
 ]
 
 
@@ -420,4 +450,3 @@ while True:
     except Exception, e:
         dbg(e)
         break
-

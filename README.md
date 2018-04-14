@@ -1,3 +1,13 @@
+# Forked repo from [makermusings/fauxmo](https://github.com/makermusings/fauxmo)
+
+* added support [ADRSIR　ラズベリー・パイ専用 学習リモコン基板](http://bit-trade-one.co.jp/product/module/adrsir/)
+* autostart when raspberry pi starts by cron @reboot
+* ADRSIR command I2C0x52-IR(but little modified)
+
+
+bellow original README.md
+---
+
 # fauxmo
 **Emulated Belkin WeMo devices that work with the Amazon Echo**
 
@@ -6,8 +16,8 @@ the Amazon Echo with your own home automation.
 
 ### Summary
 
-The Amazon Echo will allow you to control a limited number of home automation devices 
-by voice. If you want to control device types that it doesn't know about, or perform 
+The Amazon Echo will allow you to control a limited number of home automation devices
+by voice. If you want to control device types that it doesn't know about, or perform
 more sophisticated actions, the Echo doesn't provide any native options. This code
 emulates the Belkin WeMo devices in software, allowing you to have it appear that
 any number of them are on your network and to link their on and off actions to

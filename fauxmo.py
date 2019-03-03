@@ -359,6 +359,21 @@ class upnp_broadcast_responder(object):
 # This example class takes two full URLs that should be requested when an on
 # and off command are invoked respectively. It ignores any return data.
 
+class post_api_handler(object):
+    def __init__(self, host, on_payload, off_payload):
+        self.host = host
+        self.on_payload = on_payload
+        self.off_payload = off_payload
+    
+    def on(self):
+        r = requests.post(self.host, data=self.on_payload)
+        return r.status_code == 200
+    
+    def off(self):
+        r = requests.post(self.host, data=self.off_payload)
+        return r.status_code == 200
+
+
 class rest_api_handler(object):
     def __init__(self, on_cmd, off_cmd):
         self.on_cmd = on_cmd
@@ -383,9 +398,15 @@ class rest_api_handler(object):
 # 16 switches it can control. Only the first 16 elements of the FAUXMOS
 # list will be used.
 
+my_ip_address = upnp_device.local_ip_address()
+
 FAUXMOS = [
-    ['office lights', rest_api_handler('http://192.168.5.4/ha-api?cmd=on&a=office', 'http://192.168.5.4/ha-api?cmd=off&a=office')],
-    ['kitchen lights', rest_api_handler('http://192.168.5.4/ha-api?cmd=on&a=kitchen', 'http://192.168.5.4/ha-api?cmd=off&a=kitchen')],
+#    first two examples use GET api
+    ['ispresso heat', rest_api_handler('http://' + my_ip_address + '/?heat=on', 'http://' + my_ip_address + '/?heat=off')],
+    ['ispresso pump', rest_api_handler('http://' + my_ip_address + '/?pump=on', 'http://' + my_ip_address + '/?pump=off')],
+#   these two examples use POST api.  
+#    ['ispresso heat', post_api_handler('http://' + my_ip_address + '/', { 'operation' : 'heat', 'flag' : 'on' }, { 'operation' : 'heat', 'flag' : 'off' })],
+#    ['ispresso pump', post_api_handler('http://' + my_ip_address + '/', { 'operation' : 'pump', 'flag' : 'on' }, { 'operation' : 'pump', 'flag' : 'off' })],
 ]
 
 

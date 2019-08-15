@@ -211,6 +211,7 @@ class fauxmo(upnp_device):
             self.action_handler = action_handler
         else:
             self.action_handler = self
+        self.device_state = 0
         dbg("FauxMo device '%s' ready on %s:%s" % (self.name, self.ip_address, self.port))
 
     def get_name(self):
@@ -237,10 +238,12 @@ class fauxmo(upnp_device):
             if data.find('<BinaryState>1</BinaryState>') != -1:
                 # on
                 dbg("Responding to ON for %s" % self.name)
+                self.device_state = 1
                 success = self.action_handler.on()
             elif data.find('<BinaryState>0</BinaryState>') != -1:
                 # off
                 dbg("Responding to OFF for %s" % self.name)
+                self.device_state = 0
                 success = self.action_handler.off()
             else:
                 dbg("Unknown Binary State request:")
@@ -261,6 +264,22 @@ class fauxmo(upnp_device):
                            "\r\n"
                            "%s" % (len(soap), date_str, soap))
                 socket.send(message)
+        elif data.find('SOAPACTION: "urn:Belkin:service:basicevent:1#GetBinaryState"') != -1:
+            dbg("Responding to GetBinaryState for %s" % self.name)
+
+            soap = """<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/" s:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/"><s:Body><u:GetBinaryStateResponse xmlns:u="urn:Belkin:service:basicevent:1"><BinaryState>%d</BinaryState></u:GetBinaryStateResponse></s:Body> </s:Envelope>""" % self.device_state
+            date_str = email.utils.formatdate(timeval=None, localtime=False, usegmt=True)
+            message = ("HTTP/1.1 200 OK\r\n"
+               "CONTENT-LENGTH: %d\r\n"
+               "CONTENT-TYPE: text/xml charset=\"utf-8\"\r\n"
+               "DATE: %s\r\n"
+               "EXT:\r\n"
+               "SERVER: Unspecified, UPnP/1.0, Unspecified\r\n"
+               "X-User-Agent: redsonic\r\n"
+               "CONNECTION: close\r\n"
+               "\r\n"
+               "%s" % (len(soap), date_str, soap))
+            socket.send(message)
         else:
             dbg(data)
 
